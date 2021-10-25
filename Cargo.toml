@@ -1,0 +1,22 @@
+[package]
+name = "embedded-wasm-nrf52"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["nrf52840-pac/rt"]
+
+
+[dependencies]
+nrf52840-pac = "0.10.0"
+nrf-hal-common = { version = "0.14.0", default-features=false, features=[ "52840" ] }
+
+embedded-hal = "1.0.0-alpha.5"
+
+wasm-embedded-rt = { path = "../embedded-wasm/rt", default-features=false, features=[ "rt-wasm3" ] }
+cortex-m = "0.7.3"
+cortex-m-rt = "0.7.0"
+
+[patch.crates-io]
+wasm-embedded-lib = { path = "../embedded-wasm/lib" }
+
