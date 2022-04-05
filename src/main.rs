@@ -81,7 +81,7 @@ mod app {
         let usb_serial = SerialPort::new(&usb_bus);
 
         let block_dev = Block::new();
-        let usb_store = Scsi::new(&usb_bus, 128, block_dev, "V", "P", "0.1");
+        let usb_store = Scsi::new(&usb_bus, 64, block_dev, "V", "P", "0.1");
 
         // Setup USB device
         let usb_dev = UsbDeviceBuilder::new(&usb_bus, 
@@ -178,41 +178,43 @@ mod app {
 
 
 
-pub struct Block<const P: usize = 256, const N: usize = 8> {
-    data: [[u8; P]; N]
+pub struct Block<const N: usize = 16384> {
+    data: [u8; N],
 }
 
-impl <const P: usize, const N: usize> Block<P, N> {
+impl <const N: usize> Block<N> {
     pub fn new() -> Self {
         Self {
-            data: [[0u8; P]; N],
+            data: [0u8; N],
         }
     }
 }
 
-impl <const P: usize, const N: usize> BlockDevice for Block<P, N> {
-    const BLOCK_BYTES: usize = P;
+
+impl <const N: usize> BlockDevice for Block<N> {
+    const BLOCK_BYTES: usize = 512;
 
     fn read_block(&self, lba: u32, block: &mut [u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
         defmt::info!("Read block {} ({} bytes)", lba, block.len());
 
-        block.copy_from_slice(&self.data[lba as usize][..block.len()]);
+        block.copy_from_slice(&self.data[lba as usize * Self::BLOCK_BYTES..][..block.len()]);
 
-        defmt::info!("Data: {:?}", block);
+        defmt::trace!("Data: {:?}", block);
 
         Ok(())
     }
 
     fn write_block(&mut self, lba: u32, block: &[u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
-        defmt::info!("Write block {}: {:?}", lba, block);
+        defmt::info!("Write block {}", lba);
+        defmt::trace!("Data: {:?}", block);
 
-        self.data[lba as usize][..block.len()].copy_from_slice(block);
+        self.data[lba as usize * Self::BLOCK_BYTES..][..block.len()].copy_from_slice(block);
 
         Ok(())
     }
 
     fn max_lba(&self) -> u32 {
-        P as u32
+        (N / Self::BLOCK_BYTES - 1) as u32
     }
 }
 
