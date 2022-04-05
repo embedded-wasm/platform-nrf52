@@ -1,7 +1,12 @@
 [target.thumbv7em-none-eabihf]
-runner = "probe-run --chip STM32F429ZITx"
+runner = "probe-run --chip NRF52840"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-Tdefmt.x",
+]
 
 [build]
 target = "thumbv7em-none-eabihf"
 
-
+[env]
+DEFMT_LOG = "info"
