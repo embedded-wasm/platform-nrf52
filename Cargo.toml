@@ -34,6 +34,8 @@ wasm-embedded-spec = { version="0.3.0", default_features=false }
 defmt = "0.3.1"
 defmt-rtt = "0.3.2"
 panic-probe = "0.3.0"
+fugit = "0.3.5"
+packing = "0.2.0"
 
 
 [profile.dev]

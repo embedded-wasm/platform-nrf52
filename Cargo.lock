@@ -256,8 +256,10 @@ dependencies = [
  "defmt",
  "defmt-rtt",
  "embedded-hal 1.0.0-alpha.7",
+ "fugit",
  "nrf52840-hal",
  "nrf52840-pac",
+ "packing 0.2.0",
  "panic-probe",
  "usb-device",
  "usbd-serial",
@@ -275,6 +277,24 @@ dependencies = [
  "bytemuck",
  "half",
  "typenum",
+]
+
+[[package]]
+name = "fugit"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6d8595783d5ca52f0e9830036b3d24f359fae0fcc6bb5fde41f2dd82997cb58"
+dependencies = [
+ "gcd",
+]
+
+[[package]]
+name = "gcd"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f37978dab2ca789938a83b2f8bc1ef32db6633af9051a6cd409eff72cbaaa79a"
+dependencies = [
+ "paste",
 ]
 
 [[package]]
@@ -436,6 +456,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "packing"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4244f3101641a801ce20e684a149dccc3c0d9a290f4061ff57890099313fbecd"
+dependencies = [
+ "packing_codegen",
+ "typenum",
+]
+
+[[package]]
 name = "packing_codegen"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -454,6 +484,12 @@ checksum = "3ab1f00eac22bd18f8e5cae9555f2820b3a0c166b5b556ee3e203746ea6dcf3a"
 dependencies = [
  "cortex-m",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
 
 [[package]]
 name = "proc-macro-error"
@@ -634,7 +670,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68df793ca56bcdef49a7f1a584798ecdf3bf1e69669df5f6d539245b985f3a4b"
 dependencies = [
  "bitmask",
- "packing",
+ "packing 0.1.0",
 ]
 
 [[package]]
@@ -669,7 +705,7 @@ dependencies = [
  "embedded-hal 0.2.6",
  "itm_logger",
  "nb 0.1.3",
- "packing",
+ "packing 0.1.0",
  "typenum",
  "usb-device",
  "usbd_mass_storage",
@@ -684,7 +720,7 @@ dependencies = [
  "embedded-hal 0.2.6",
  "itm_logger",
  "nb 0.1.3",
- "packing",
+ "packing 0.1.0",
  "typenum",
  "usb-device",
 ]
@@ -698,7 +734,7 @@ dependencies = [
  "embedded-hal 0.2.6",
  "itm_logger",
  "nb 0.1.3",
- "packing",
+ "packing 0.1.0",
  "typenum",
  "uf2_block",
  "usb-device",
