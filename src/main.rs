@@ -1,3 +1,5 @@
+#![feature(generic_const_exprs)]
+
 #![no_main]
 #![no_std]
 
@@ -14,50 +16,25 @@ use usbd_serial::{SerialPort, USB_CLASS_CDC};
 use usbd_scsi::{Scsi, BlockDevice};
 
 use defmt_rtt as _;
-
+use panic_probe as _;
 
 use wasm_embedded_spec::{spi, gpio, i2c};
 
 const BIN: &'static [u8] = &[ 0x00, 0x11, 0x22 ];
 
 
-#[panic_handler] // panicking behavior
-fn panic(_: &core::panic::PanicInfo) -> ! {
-    loop {
-        cortex_m::asm::bkpt();
-    }
-}
-
 /// Combine USB classes to avoid mutex nightmares
 pub struct UsbCtx {
     pub usb_serial: SerialPort<'static, Usbd<UsbPeripheral<'static>>>,
-    pub usb_store: Scsi<'static, Usbd<UsbPeripheral<'static>>, Block>,
+    //pub usb_store: Scsi<'static, Usbd<UsbPeripheral<'static>>, Block>,
 }
 
-pub struct Block {
 
-}
-
-impl BlockDevice for Block {
-    const BLOCK_BYTES: usize = 128;
-
-    fn read_block(&self, lba: u32, block: &mut [u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
-        todo!()
-    }
-
-    fn write_block(&mut self, lba: u32, block: &[u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
-        todo!()
-    }
-
-    fn max_lba(&self) -> u32 {
-        todo!()
-    }
-}
 
 #[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [PWM0])]
 mod app {
     use nrf52840_hal::clocks::{Clocks, ExternalOscillator, Internal, LfOscStopped};
-    use wasm_embedded_rt_wasm3::{Wasm3Runtime, Engine as _};
+    //use wasm_embedded_rt_wasm3::{Wasm3Runtime, Engine as _};
     use super::*;
 
     #[shared]
@@ -76,14 +53,16 @@ mod app {
         USB_ALLOCATOR: Option<UsbBusAllocator<Usbd<UsbPeripheral<'static>>>> = None,
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
-        let periph = nrf52840_hal::pac::Peripherals::take().unwrap();
-
-        defmt::info!("init");
+        let periph = cx.device;
 
         // Setup clocks
         let clocks = Clocks::new(periph.CLOCK);
-        *cx.local.CLOCKS = Some(clocks.enable_ext_hfosc());
+        let clocks = clocks.enable_ext_hfosc();
+
+        *cx.local.CLOCKS = Some(clocks);
         let clocks = cx.local.CLOCKS.as_ref().unwrap();
+
+        defmt::info!("init");
 
         // Setup USB allocator
         *cx.local.USB_ALLOCATOR = Some(Usbd::new(UsbPeripheral::new(periph.USBD, &clocks)));
@@ -92,46 +71,61 @@ mod app {
         // Attach USB classes
         let usb_serial = SerialPort::new(&usb_bus);
 
-        let block_dev = Block{};
-        let usb_store = Scsi::new(&usb_bus, 128, block_dev, "Fake Vendor", "Fake Product", "Fake Rev");
+        //let block_dev = Block::new();
+        //let usb_store = Scsi::new(&usb_bus, 128, block_dev, "V", "P", "Rev");
 
         // Setup USB device
-        let usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16c0, 0x27dd))
+        let usb_dev = UsbDeviceBuilder::new(&usb_bus, 
+                UsbVidPid(0x16c0, 0x27dd))
             .manufacturer("Fake company")
             .product("Serial port")
             .serial_number("TEST")
-            .device_class(USB_CLASS_CDC)
-            .max_packet_size_0(64) // (makes control transfers 8x faster)
+            .device_class(0xE3)
+            //.max_packet_size_0(64) // (makes control transfers 8x faster)
             .build();
 
         // TODO: migrate WASM to tasks
+        #[cfg(nope)]
+        {
+            // Setup WASM context
+            let mut ctx = Context{};
 
-        
-        // Setup WASM context
-        let mut ctx = Context{};
+            // Setup runtime
+            let mut rt = match Wasm3Runtime::new(&mut ctx, BIN) {
+                Ok(rt) => rt,
+                Err(e) =>{
+                    defmt::error!("Failed to initialise runtime: {:?}", defmt::Debug2Format(&e));
+                    loop {}
+                }
+            };
 
-        // Setup runtime
-        let mut rt = match Wasm3Runtime::new(&mut ctx, BIN) {
-            Ok(rt) => rt,
-            Err(e) =>{
-                defmt::error!("Failed to initialise runtime: {:?}", defmt::Debug2Format(&e));
-                loop {}
+            // Execute task
+            if let Err(e) = rt.run() {
+                defmt::error!("Runtime error: {:?}", defmt::Debug2Format(&e));
             }
-        };
-
-        // Execute task
-        if let Err(e) = rt.run() {
-            defmt::error!("Runtime error: {:?}", defmt::Debug2Format(&e));
         }
 
-        (Shared { usb: UsbCtx{ usb_serial, usb_store } }, Local{usb_dev}, init::Monotonics())
+        defmt::info!("Init complete");
+
+        (Shared { usb: UsbCtx{ usb_serial } }, Local{ usb_dev }, init::Monotonics())
     }
 
     #[idle]
     fn idle(_: idle::Context) -> ! {
         defmt::info!("idle");
 
-        loop {}
+        loop {
+            unsafe { core::arch::asm!("nop") };
+        }
+    }
+
+    #[cfg(nope)]
+    fn tick(mut cx: tick::Context) {
+        // Update block device
+        cx.resources
+          .scsi
+          .block_device_mut()
+          .tick(TICK_MS);
     }
 
     /// USB polling software task, called by IRQs
@@ -143,15 +137,18 @@ mod app {
          cx.shared.usb.lock(|usb| {
  
              // Poll USB device
-             usb_dev.poll(&mut [&mut usb.usb_store, &mut usb.usb_serial]);
+             usb_dev.poll(&mut [&mut usb.usb_serial]);
              let mut buf = [0u8; 64];
  
              // Echo on serial port (placeholder)
              if let Ok(count) = usb.usb_serial.read(&mut buf) {
+                defmt::info!("{:?}", &buf[..count]);
+
                  for (i, c) in buf.iter().enumerate() {
                      if i >= count {
                          break;
                      }
+                     
                      usb.usb_serial.write(&[c.clone()]).ok();
                  }
              };
@@ -162,6 +159,33 @@ mod app {
 
 
 
+pub struct Block<const N: usize = 1024> {
+    data: [u8; N]
+}
+
+impl <const N: usize>Block<N> {
+    pub fn new() -> Self {
+        Self {
+            data: [0u8; N],
+        }
+    }
+}
+
+impl <const N: usize> BlockDevice for Block<N> {
+    const BLOCK_BYTES: usize = N / 4;
+
+    fn read_block(&self, lba: u32, block: &mut [u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
+        todo!("Implement read block")
+    }
+
+    fn write_block(&mut self, lba: u32, block: &[u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
+        todo!("Implement write block")
+    }
+
+    fn max_lba(&self) -> u32 {
+        4
+    }
+}
 
 struct Context {
 

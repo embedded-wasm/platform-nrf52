@@ -4,7 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["nrf52840-pac/rt"]
+
+defmt-default = []
+defmt-trace = []
+defmt-debug = []
+defmt-info = []
+defmt-warn = []
+defmt-error = []
+
+default = [ "defmt-default" ]
 
 
 [dependencies]
@@ -14,16 +22,18 @@ cortex-m-rtic = "1.0.0"
 nrf52840-pac = "0.11.0"
 nrf52840-hal = { version = "0.15.0", features = [ "rt" ] }
 
-embedded-hal = "1.0.0-alpha.5"
+embedded-hal = "1.0.0-alpha.6"
 
 usb-device = "0.2.8"
 usbd-serial = "0.1.1"
 usbd_scsi = "0.1.0"
 
-wasm-embedded-spec = { version="*", default_features=false }
-wasm-embedded-rt-wasm3 = { version="*", default-features=false }
+wasm-embedded-spec = { version="0.3.0", default_features=false }
+#wasm-embedded-rt-wasm3 = { version="*", default-features=false, features=[ "build-wasm3" ]}
+
 defmt = "0.3.1"
 defmt-rtt = "0.3.2"
+panic-probe = "0.3.0"
 
 
 [profile.dev]
@@ -41,4 +51,4 @@ panic = "abort"
 wasm-embedded-spec = { path = "../wasm/spec" }
 wasm-embedded-rt-wasm3 = { path = "../wasm/rt_wasm3" }
 
-nrf52833-hal = { git = "https://github.com/nrf-rs/nrf-hal" }
+#nrf52833-hal = { git = "https://github.com/nrf-rs/nrf-hal" }

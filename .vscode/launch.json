@@ -1,0 +1,26 @@
+{
+    /* 
+     * Requires the Rust Language Server (RLS) and Cortex-Debug extensions
+     * https://marketplace.visualstudio.com/items?itemName=rust-lang.rust
+     * https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug
+     */
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cortex-debug",
+            "request": "launch",
+            "name": "Debug (JLink)",
+            "servertype": "jlink",
+            "gdbPath": "/usr/bin/gdb-multiarch",
+            "cwd": "${workspaceRoot}",
+            "preLaunchTask": "cargo build",
+            "runToMain": true,
+            "executable": "./target/thumbv7em-none-eabihf/debug/embedded-wasm-nrf52",
+            /* Run `cargo build --example hello` and uncomment this line to run semi-hosting example */
+            //"executable": "./target/thumbv6m-none-eabi/debug/examples/hello",
+            "interface": "swd",
+            "device": "NRF52840_XXAA",
+            //"svdFile": "ATSAMD51G18.xml"
+        }
+    ]
+}
