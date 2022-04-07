@@ -1,8 +1,18 @@
 #![no_main]
 #![no_std]
 
-
 //extern crate alloc;
+
+// External library links
+// https://github.com/rust-embedded/book/issues/255
+
+// It appears we can use the `libm` crate
+#[link(name = "m", kind = "static")]
+extern {}
+
+// But not link the `libc` crate or `-lnosys` here
+//#[link(name = "nosys", kind = "static")]
+//extern {}
 
 use nrf52840_hal::clocks::Clocks;
 use nrf52840_hal::usbd::{UsbPeripheral, Usbd};
@@ -19,6 +29,9 @@ use defmt_rtt as _;
 use panic_probe as _;
 
 use wasm_embedded_spec::{spi, gpio, i2c};
+use wasm_embedded_rt_wasm3::{Wasm3Runtime, Engine as _};
+
+mod newlib;
 
 mod monotonic;
 use monotonic::MonoTimer;
@@ -33,11 +46,9 @@ pub struct UsbCtx {
 }
 
 
-
 #[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [PWM0])]
 mod app {
     use nrf52840_hal::clocks::{Clocks, ExternalOscillator, Internal, LfOscStopped};
-    //use wasm_embedded_rt_wasm3::{Wasm3Runtime, Engine as _};
     use super::*;
 
     #[monotonic(binds = TIMER0, default = true)]
@@ -97,7 +108,7 @@ mod app {
         poll_usb::spawn().ok();
 
         // TODO: migrate WASM to tasks
-        #[cfg(nope)]
+        //#[cfg(nope)]
         {
             // Setup WASM context
             let mut ctx = Context{};

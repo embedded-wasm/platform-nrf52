@@ -28,8 +28,10 @@ usb-device = "0.2.8"
 usbd-serial = "0.1.1"
 usbd_scsi = "0.1.0"
 
+
 wasm-embedded-spec = { version="0.3.0", default_features=false }
-#wasm-embedded-rt-wasm3 = { version="*", default-features=false, features=[ "build-wasm3" ]}
+wasm-embedded-rt-wasm3 = { version="*", default-features=false, features=[ "build-wasm3" ] }
+wasm3-sys = { version = "*", features = [ "build-bindgen" ], optional=true }
 
 defmt = "0.3.1"
 defmt-rtt = "0.3.2"
@@ -37,6 +39,14 @@ panic-probe = "0.3.0"
 fugit = "0.3.5"
 packing = "0.2.0"
 
+libc = { version = "0.2" , features = ["extra_traits"] }
+libm = "0.2.2"
+
+# https://github.com/rust-embedded/book/issues/255
+[dependencies.compiler_builtins]
+git = "https://github.com/rust-lang/compiler-builtins"
+features = ["c"]
+optional = true
 
 [profile.dev]
 codegen-units = 1

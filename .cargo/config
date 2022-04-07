@@ -1,11 +1,16 @@
 [target.thumbv7em-none-eabihf]
 runner = "probe-run --chip NRF52840"
-#linker = "arm-none-eabi-gcc"
+linker = "arm-none-eabi-gcc"
 rustflags = [
-#  "-C", "link-arg=--specs=nosys.specs",
-#  "-C", "link-arg=-lnosys",
-  "-C", "link-arg=-Tlink.x",
-  "-C", "link-arg=-Tdefmt.x",
+    "-C", "link-arg=--specs=nosys.specs",
+    "-C", "link-arg=-mthumb",
+    "-C", "link-arg=-mcpu=cortex-m4",
+    "-C", "link-arg=-mfloat-abi=hard",
+    "-C", "link-arg=-mfpu=fpv4-sp-d16",
+    "-C", "link-arg=-lnosys",
+    "-C", "link-arg=-lc",
+    "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=-Tdefmt.x",
 ]
 
 [build]
