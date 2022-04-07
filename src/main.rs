@@ -1,18 +1,12 @@
 #![no_main]
 #![no_std]
+#![feature(core_ffi_c)]
 
 //extern crate alloc;
 
 // External library links
 // https://github.com/rust-embedded/book/issues/255
 
-// It appears we can use the `libm` crate
-#[link(name = "m", kind = "static")]
-extern {}
-
-// But not link the `libc` crate or `-lnosys` here
-//#[link(name = "nosys", kind = "static")]
-//extern {}
 
 use nrf52840_hal::clocks::Clocks;
 use nrf52840_hal::usbd::{UsbPeripheral, Usbd};
@@ -46,7 +40,7 @@ pub struct UsbCtx {
 }
 
 
-#[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [PWM0])]
+#[rtic::app(device = nrf52840_hal::pac, peripherals = true, dispatchers = [PWM0, PWM1])]
 mod app {
     use nrf52840_hal::clocks::{Clocks, ExternalOscillator, Internal, LfOscStopped};
     use super::*;
@@ -107,26 +101,8 @@ mod app {
         // Schedule USB task
         poll_usb::spawn().ok();
 
-        // TODO: migrate WASM to tasks
-        //#[cfg(nope)]
-        {
-            // Setup WASM context
-            let mut ctx = Context{};
-
-            // Setup runtime
-            let mut rt = match Wasm3Runtime::new(&mut ctx, BIN) {
-                Ok(rt) => rt,
-                Err(e) =>{
-                    defmt::error!("Failed to initialise runtime: {:?}", defmt::Debug2Format(&e));
-                    loop {}
-                }
-            };
-
-            // Execute task
-            if let Err(e) = rt.run() {
-                defmt::error!("Runtime error: {:?}", defmt::Debug2Format(&e));
-            }
-        }
+        // Schedule WASM task
+        poll_wasm::spawn().ok();
 
         defmt::info!("Init complete");
 
@@ -142,16 +118,31 @@ mod app {
         }
     }
 
-    #[cfg(nope)]
-    fn tick(mut cx: tick::Context) {
-        // Update block device
-        cx.resources
-          .scsi
-          .block_device_mut()
-          .tick(TICK_MS);
+    #[task(priority = 1, shared = [], local = [])]
+    fn poll_wasm(mut cx: poll_wasm::Context) {
+        // Setup WASM context
+        let mut ctx = Context{};
+
+        defmt::info!("Configuring runtime");
+
+        // Setup runtime
+        let mut rt = match Wasm3Runtime::new(&mut ctx, BIN) {
+            Ok(rt) => rt,
+            Err(e) =>{
+                defmt::error!("Failed to initialise runtime: {:?}", defmt::Debug2Format(&e));
+                loop {}
+            }
+        };
+
+        defmt::info!("Executing task");
+
+        // Execute task
+        if let Err(e) = rt.run() {
+            defmt::error!("Runtime error: {:?}", defmt::Debug2Format(&e));
+        }
     }
 
-    /// USB polling software task, called by IRQs
+    /// USB polling software task, periodic (todo: enable IRQs too?)
     #[task(priority = 3, shared = [usb], local = [usb_dev])]
     fn poll_usb(mut cx: poll_usb::Context) {
  
@@ -206,7 +197,7 @@ impl <const N: usize> BlockDevice for Block<N> {
     const BLOCK_BYTES: usize = 512;
 
     fn read_block(&self, lba: u32, block: &mut [u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
-        defmt::info!("Read block {} ({} bytes)", lba, block.len());
+        defmt::debug!("Read block {} ({} bytes)", lba, block.len());
 
         block.copy_from_slice(&self.data[lba as usize * Self::BLOCK_BYTES..][..block.len()]);
 
@@ -216,7 +207,7 @@ impl <const N: usize> BlockDevice for Block<N> {
     }
 
     fn write_block(&mut self, lba: u32, block: &[u8]) -> Result<(), usbd_scsi::BlockDeviceError> {
-        defmt::info!("Write block {}", lba);
+        defmt::debug!("Write block {}", lba);
         defmt::trace!("Data: {:?}", block);
 
         self.data[lba as usize * Self::BLOCK_BYTES..][..block.len()].copy_from_slice(block);

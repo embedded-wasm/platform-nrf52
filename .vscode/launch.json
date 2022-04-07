@@ -15,7 +15,7 @@
             "cwd": "${workspaceRoot}",
             "preLaunchTask": "cargo build",
             "runToMain": true,
-            "executable": "./target/thumbv7em-none-eabihf/debug/embedded-wasm-nrf52",
+            "executable": "./target/thumbv7em-none-eabihf/release/embedded-wasm-nrf52",
             /* Run `cargo build --example hello` and uncomment this line to run semi-hosting example */
             //"executable": "./target/thumbv6m-none-eabi/debug/examples/hello",
             "interface": "swd",

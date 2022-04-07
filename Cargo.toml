@@ -31,7 +31,10 @@ usbd_scsi = "0.1.0"
 
 wasm-embedded-spec = { version="0.3.0", default_features=false }
 wasm-embedded-rt-wasm3 = { version="*", default-features=false, features=[ "build-wasm3" ] }
-wasm3-sys = { version = "*", features = [ "build-bindgen" ], optional=true }
+
+# one day it should be possible to build and link this but, not today
+# (can't get bindgen working for cross target)
+wasm3-sys = { version = "0.5.0", default-features=false, features = [ "build-bindgen" ], optional=true }
 
 defmt = "0.3.1"
 defmt-rtt = "0.3.2"
@@ -64,3 +67,4 @@ wasm-embedded-spec = { path = "../wasm/spec" }
 wasm-embedded-rt-wasm3 = { path = "../wasm/rt_wasm3" }
 
 #nrf52833-hal = { git = "https://github.com/nrf-rs/nrf-hal" }
+wasm3-sys = { path = "../forks/wasm3-rs/wasm3-sys" }

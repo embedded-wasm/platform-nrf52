@@ -8,6 +8,7 @@ rustflags = [
     "-C", "link-arg=-mfloat-abi=hard",
     "-C", "link-arg=-mfpu=fpv4-sp-d16",
     "-C", "link-arg=-lnosys",
+    "-C", "link-arg=-lm",    
     "-C", "link-arg=-lc",
     "-C", "link-arg=-Tlink.x",
     "-C", "link-arg=-Tdefmt.x",
