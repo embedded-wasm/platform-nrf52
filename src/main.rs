@@ -30,13 +30,16 @@ mod newlib;
 mod monotonic;
 use monotonic::MonoTimer;
 
+mod ghostfat;
+use ghostfat::GhostFat;
+
 const BIN: &'static [u8] = &[ 0x00, 0x11, 0x22 ];
 
 
 /// Combine USB classes to avoid mutex nightmares
 pub struct UsbCtx {
     pub usb_serial: SerialPort<'static, Usbd<UsbPeripheral<'static>>>,
-    pub usb_store: Scsi<'static, Usbd<UsbPeripheral<'static>>, Block>,
+    pub usb_store: Scsi<'static, Usbd<UsbPeripheral<'static>>, GhostFat>,
 }
 
 
@@ -85,7 +88,7 @@ mod app {
         // Attach USB classes
         let usb_serial = SerialPort::new(&usb_bus);
 
-        let block_dev = Block::new();
+        let block_dev = GhostFat::new();
         let usb_store = Scsi::new(&usb_bus, 64, block_dev, "V", "P", "0.1");
 
         // Setup USB device
