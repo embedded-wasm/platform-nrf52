@@ -21,25 +21,67 @@ use cortex_m::asm;
 const UF2_FLASH_START: u32 = 0x08010000;
 
 const BLOCK_SIZE: usize = 512;
-const UF2_BLOCK_SIZE: usize = 256;
-const UF2_BLOCKS_PER_FAT_BLOCK: u32 = (BLOCK_SIZE / UF2_BLOCK_SIZE) as u32;
 const NUM_FAT_BLOCKS: u32 = 8000;
 const RESERVED_SECTORS: u32 = 1;
 const ROOT_DIR_SECTORS: u32 = 4;
+
 const SECTORS_PER_FAT: u32 = (NUM_FAT_BLOCKS * 2 + 511) / 512;
+
 const START_FAT0: u32 = RESERVED_SECTORS;
 const START_FAT1: u32 = START_FAT0 + SECTORS_PER_FAT;
+
 const START_ROOTDIR: u32 = START_FAT1 + SECTORS_PER_FAT;
+
 const START_CLUSTERS: u32 = START_ROOTDIR + ROOT_DIR_SECTORS;
+
 const UF2_SIZE: u32 = 0x10000 * 2;
 const UF2_SECTORS: u32 = UF2_SIZE / (BLOCK_SIZE as u32);
 
 const RESTART_DELAY_MS: u32 = 200;
 
-
-
 const ASCII_SPACE: u8 = 0x20;
 
+
+pub struct GhostFatConfig {
+    pub block_size: u32,
+    pub num_blocks: u32,
+    pub reserved_sectors: u32,
+    pub root_dir_sectors: u32,
+
+}
+
+impl Default for GhostFatConfig {
+    fn default() -> Self {
+        Self { 
+            block_size: 512,
+            num_blocks: 8000,
+            reserved_sectors: 1,
+            root_dir_sectors: 4,
+        }
+    }
+}
+
+impl GhostFatConfig {
+    const fn sectors_per_fat(&self) -> u32 {
+        (self.num_blocks * 2 + 511) / 512
+    }
+
+    const fn start_fat0(&self) -> u32 {
+        RESERVED_SECTORS
+    }
+
+    const fn start_fat1(&self) -> u32 {
+        self.start_fat0() + self.sectors_per_fat()
+    }
+
+    const fn start_rootdir(&self) -> u32 {
+        self.start_fat1() + self.sectors_per_fat()
+    }
+
+    const fn start_clusters(&self) -> u32 {
+        self.start_rootdir() + self.root_dir_sectors
+    }
+}
 
 
 #[derive(Clone, Copy, Default, Packed)]
@@ -204,26 +246,22 @@ pub struct FatBootBlock {
     pub filesystem_identifier: [u8; 8],
 }
 
-pub fn fat_boot_block() -> FatBootBlock {
-    const RESERVED_SECTORS: u16 = 1;
-    const ROOT_DIR_SECTORS: u16 = 4;
-    const NUM_FAT_BLOCKS: u16 = 8000;
-    const SECTORS_PER_FAT: u16 = (NUM_FAT_BLOCKS * 2 + 511) / 512;
+pub fn fat_boot_block(config: &GhostFatConfig) -> FatBootBlock {
     let mut fat = FatBootBlock {
         jump_instruction: [0xEB, 0x3C, 0x90],
         oem_info: [0x20; 8],
-        sector_size: 512,
+        sector_size: config.block_size as u16,
         sectors_per_cluster: 1,
-        reserved_sectors: RESERVED_SECTORS,
+        reserved_sectors: config.reserved_sectors as u16,
         fat_copies: 2,
-        root_directory_entries: (ROOT_DIR_SECTORS * 512 / 32),
-        total_sectors16: NUM_FAT_BLOCKS - 2,
+        root_directory_entries: (config.root_dir_sectors as u16 * 512 / 32),
+        total_sectors16: config.num_blocks as u16 - 2,
         media_descriptor: 0xF8,
-        sectors_per_fat: SECTORS_PER_FAT,
+        sectors_per_fat: config.sectors_per_fat() as u16,
         sectors_per_track: 1,
         heads: 1,
         hidden_sectors: 0,
-        total_sectors32: NUM_FAT_BLOCKS as u32 - 1,
+        total_sectors32: config.num_blocks - 1,
         physical_drive_num: 0,
         _reserved: 0,
         extended_boot_sig: 0x29,
@@ -231,6 +269,7 @@ pub fn fat_boot_block() -> FatBootBlock {
         volume_label: [0x20; 11],
         filesystem_identifier: [0x20; 8],
     };
+
     fat.oem_info[..7].copy_from_slice("UF2 UF2".as_bytes());
     fat.volume_label[..8].copy_from_slice("BLUEPILL".as_bytes());
     fat.filesystem_identifier[..5].copy_from_slice("FAT16".as_bytes());
@@ -241,6 +280,7 @@ pub fn fat_boot_block() -> FatBootBlock {
 
 /// # Dummy fat implementation that provides a [UF2 bootloader](https://github.com/microsoft/uf2)
 pub struct GhostFat {
+    config: GhostFatConfig,
     fat_boot_block: FatBootBlock,
     fat_files: [FatFile; 3],
     uf2_blocks_written: u32,
@@ -249,13 +289,14 @@ pub struct GhostFat {
 }
 
 impl GhostFat {
-    pub fn new() -> Self {
+    pub fn new(config: GhostFatConfig) -> Self {
         Self{
-            fat_boot_block: fat_boot_block(),
+            fat_boot_block: fat_boot_block(&config),
             fat_files: fat_files(),
             uf2_blocks_written: 0,
             tick_ms: 0,
             restart_ms: 0,
+            config,
         }
     }
 }
@@ -271,13 +312,13 @@ impl BlockDevice for GhostFat {
         // Clear the buffer since we're sending all of it
         for b in block.iter_mut() { *b = 0 }
    
+        // Block 0 is the fat boot block
         if lba == 0 {
-            // Block 0 is the fat boot block
             self.fat_boot_block.pack(&mut block[..FatBootBlock::BYTES]).unwrap();
             block[510] = 0x55;
             block[511] = 0xAA;
 
-        } else if lba < START_ROOTDIR {
+        } else if lba < self.config.start_rootdir() {
             let mut section_index = lba - START_FAT0;
 
             if section_index >= SECTORS_PER_FAT {
@@ -306,8 +347,8 @@ impl BlockDevice for GhostFat {
                 }
             }         
 
-        } else if lba < START_CLUSTERS {
-            let section_index = lba - START_ROOTDIR;            
+        } else if lba < self.config.start_clusters() {
+            let section_index = lba - self.config.start_rootdir();            
             if section_index == 0 {
                 let mut dir = DirectoryEntry::default();
                 dir.name.copy_from_slice(&self.fat_boot_block.volume_label);

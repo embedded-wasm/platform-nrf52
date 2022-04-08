@@ -88,7 +88,7 @@ mod app {
         // Attach USB classes
         let usb_serial = SerialPort::new(&usb_bus);
 
-        let block_dev = GhostFat::new();
+        let block_dev = GhostFat::new(Default::default());
         let usb_store = Scsi::new(&usb_bus, 64, block_dev, "V", "P", "0.1");
 
         // Setup USB device
