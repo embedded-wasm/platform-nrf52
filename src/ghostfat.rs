@@ -14,46 +14,24 @@ use usbd_scsi::{
 
 use defmt::{info, debug, warn};
 
-use cortex_m::asm;
-
-// 64kb left for bootloader since logging is huge
-// TODO: Needs to be configurable, can this be passed in from a linker section maybe?
-const UF2_FLASH_START: u32 = 0x08010000;
-
-const BLOCK_SIZE: usize = 512;
-const NUM_FAT_BLOCKS: u32 = 8000;
-const RESERVED_SECTORS: u32 = 1;
-const ROOT_DIR_SECTORS: u32 = 4;
-
-const SECTORS_PER_FAT: u32 = (NUM_FAT_BLOCKS * 2 + 511) / 512;
-
-const START_FAT0: u32 = RESERVED_SECTORS;
-const START_FAT1: u32 = START_FAT0 + SECTORS_PER_FAT;
-
-const START_ROOTDIR: u32 = START_FAT1 + SECTORS_PER_FAT;
-
-const START_CLUSTERS: u32 = START_ROOTDIR + ROOT_DIR_SECTORS;
 
 const UF2_SIZE: u32 = 0x10000 * 2;
-const UF2_SECTORS: u32 = UF2_SIZE / (BLOCK_SIZE as u32);
+const UF2_SECTORS: u32 = UF2_SIZE / (512 as u32);
 
-const RESTART_DELAY_MS: u32 = 200;
 
 const ASCII_SPACE: u8 = 0x20;
 
 
-pub struct GhostFatConfig {
-    pub block_size: u32,
+pub struct GhostFatConfig<const BLOCK_SIZE: u32 = 512> {
     pub num_blocks: u32,
     pub reserved_sectors: u32,
     pub root_dir_sectors: u32,
 
 }
 
-impl Default for GhostFatConfig {
+impl <const BLOCK_SIZE: u32> Default for GhostFatConfig<BLOCK_SIZE> {
     fn default() -> Self {
         Self { 
-            block_size: 512,
             num_blocks: 8000,
             reserved_sectors: 1,
             root_dir_sectors: 4,
@@ -61,13 +39,18 @@ impl Default for GhostFatConfig {
     }
 }
 
-impl GhostFatConfig {
+impl <const BLOCK_SIZE: u32> GhostFatConfig<BLOCK_SIZE> {
+
+    const fn sector_size(&self) -> u32 {
+        BLOCK_SIZE
+    }
+
     const fn sectors_per_fat(&self) -> u32 {
-        (self.num_blocks * 2 + 511) / 512
+        (self.num_blocks * 2 + BLOCK_SIZE - 1) / BLOCK_SIZE
     }
 
     const fn start_fat0(&self) -> u32 {
-        RESERVED_SECTORS
+        self.reserved_sectors
     }
 
     const fn start_fat1(&self) -> u32 {
@@ -250,7 +233,7 @@ pub fn fat_boot_block(config: &GhostFatConfig) -> FatBootBlock {
     let mut fat = FatBootBlock {
         jump_instruction: [0xEB, 0x3C, 0x90],
         oem_info: [0x20; 8],
-        sector_size: config.block_size as u16,
+        sector_size: config.sector_size() as u16,
         sectors_per_cluster: 1,
         reserved_sectors: config.reserved_sectors as u16,
         fat_copies: 2,
@@ -284,8 +267,6 @@ pub struct GhostFat {
     fat_boot_block: FatBootBlock,
     fat_files: [FatFile; 3],
     uf2_blocks_written: u32,
-    tick_ms: u32,
-    restart_ms: u32,
 }
 
 impl GhostFat {
@@ -294,18 +275,16 @@ impl GhostFat {
             fat_boot_block: fat_boot_block(&config),
             fat_files: fat_files(),
             uf2_blocks_written: 0,
-            tick_ms: 0,
-            restart_ms: 0,
             config,
         }
     }
 }
 
 impl BlockDevice for GhostFat {
-    const BLOCK_BYTES: usize = BLOCK_SIZE;
+    const BLOCK_BYTES: usize = 512;
 
     fn read_block(&self, lba: u32, block: &mut [u8]) -> Result<(), BlockDeviceError> {
-        assert_eq!(block.len(), BLOCK_SIZE);
+        assert_eq!(block.len(), Self::BLOCK_BYTES);
 
         info!("GhostFAT reading block: {}", lba);
 
@@ -318,13 +297,17 @@ impl BlockDevice for GhostFat {
             block[510] = 0x55;
             block[511] = 0xAA;
 
+        // File allocation table(s) follow the boot block
         } else if lba < self.config.start_rootdir() {
-            let mut section_index = lba - START_FAT0;
+            let mut section_index = lba - self.config.start_fat0();
 
-            if section_index >= SECTORS_PER_FAT {
-                section_index -= SECTORS_PER_FAT;
+            // TODO: why?
+            // https://github.com/lupyuen/bluepill-bootloader/blob/master/src/ghostfat.c#L207
+            if section_index >= self.config.sectors_per_fat() {
+                section_index -= self.config.sectors_per_fat();
             }
 
+            // Set allocations for static files
             if section_index == 0 {
                 block[0] = 0xF0;
                 for i in 1..(self.fat_files.len() * 2 + 4) {
@@ -332,9 +315,11 @@ impl BlockDevice for GhostFat {
                 }
             }
          
+            // Assuming each file is one block, uf2 is offset by this
             let uf2_first_sector = self.fat_files.len() + 1;
             let uf2_last_sector = uf2_first_sector + UF2_SECTORS as usize - 1;
             
+            // TODO: is this setting allocations for the uf2 file?
             for i in 0..256_usize {
                 let v = section_index as usize * 256 + i;
                 let j = 2 * i;
@@ -347,22 +332,27 @@ impl BlockDevice for GhostFat {
                 }
             }         
 
+        // Directory entries follow
         } else if lba < self.config.start_clusters() {
+
             let section_index = lba - self.config.start_rootdir();            
             if section_index == 0 {
                 let mut dir = DirectoryEntry::default();
                 dir.name.copy_from_slice(&self.fat_boot_block.volume_label);
                 dir.attrs = 0x28;
+
                 let len = DirectoryEntry::BYTES;
                 dir.pack(&mut block[..len]).unwrap();
                 dir.attrs = 0;
+                
+                // Generate directory entries for registered files
                 for (i, info) in self.fat_files.iter().enumerate() {
                     dir.name.copy_from_slice(&info.name);
                     dir.start_cluster = i as u16 + 2;
                     dir.size = match info.content {
                         FatFileContent::Static(content) => content.len() as u32,
                         FatFileContent::Uf2 => {
-                            // TODO: read data for this object
+                            // TODO: set data length for this object
                             0
                         },
                     };
@@ -370,11 +360,12 @@ impl BlockDevice for GhostFat {
                     dir.pack(&mut block[start..(start+len)]).unwrap();
                 }
             }
-            
+        
+        // Then finally clusters (containing actual data)
         } else {
-            let section_index = (lba - START_CLUSTERS) as usize;
+            let section_index = (lba - self.config.start_clusters()) as usize;
 
-            if section_index < UF2_INDEX {//self.fat_files.len() {
+            if section_index < self.fat_files.len() {
                 let info = &self.fat_files[section_index];
                 if let FatFileContent::Static(content) = &info.content {
                     block[..content.len()].copy_from_slice(content);
@@ -392,25 +383,29 @@ impl BlockDevice for GhostFat {
     }
 
     fn write_block(&mut self, lba: u32, block: &[u8]) -> Result<(), BlockDeviceError> {
-        info!("GhostFAT writing block: {}", lba);
+        info!("GhostFAT writing block {}: {:?}", lba, block);
 
-        //TODO: Should BDE have an error to represent this kind of protocol error?
-        //      It likely doesn't matter as FAT/SCSI/USB doesn't have a nice way to report
-        //      a user facing error. The best we can manage is something like a write error
-        //      or phase error. Some DFU firmwares report back errors by creating a file 
-        //      called error.txt in the root. Could be an option but it's not part of UF2.
-        const PROTOCOL_ERROR: Result<(), BlockDeviceError> = Err(BlockDeviceError::WriteError);
+        if lba == 0 {
+            warn!("Attempted write to boot sector");
+            return Ok(())
 
-        if lba < (START_CLUSTERS + self.fat_files.len() as u32) {
-            info!("    GhostFAT skipping non-UF2 area");
-            return Ok(());
+        // Write to FAT
+        } else if lba < self.config.start_rootdir() {
+
+        // Write directory entry
+        } else if lba < self.config.start_clusters() {
+
+        // Write cluster data
+        } else {
+
         }
 
         // TODO: write block to flash
 
         Ok(())
     }
+
     fn max_lba(&self) -> u32 {
-        NUM_FAT_BLOCKS - 1
+        self.config.num_blocks - 1
     }
 }
