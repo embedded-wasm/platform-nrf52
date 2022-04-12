@@ -326,7 +326,9 @@ dependencies = [
  "defmt",
  "defmt-rtt",
  "embedded-hal 1.0.0-alpha.7",
+ "embedded-storage",
  "fugit",
+ "ghostfat",
  "libc",
  "libm",
  "nrf52840-hal",
@@ -368,6 +370,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f37978dab2ca789938a83b2f8bc1ef32db6633af9051a6cd409eff72cbaaa79a"
 dependencies = [
  "paste",
+]
+
+[[package]]
+name = "ghostfat"
+version = "0.3.0"
+dependencies = [
+ "bitflags",
+ "defmt",
+ "log",
+ "packing 0.2.0",
+ "usbd_scsi",
 ]
 
 [[package]]

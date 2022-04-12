@@ -17,6 +17,8 @@ use usb_device::device::{UsbDeviceBuilder, UsbVidPid};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 use usbd_scsi::{Scsi, BlockDevice};
 
+use ghostfat::{GhostFat, File};
+
 use fugit::ExtU32;
 
 use defmt_rtt as _;
@@ -30,8 +32,9 @@ mod newlib;
 mod monotonic;
 use monotonic::MonoTimer;
 
-mod ghostfat;
-use ghostfat::GhostFat;
+mod flash;
+use flash::FlashControl;
+
 
 const BIN: &'static [u8] = &[ 0x00, 0x11, 0x22 ];
 
@@ -39,7 +42,7 @@ const BIN: &'static [u8] = &[ 0x00, 0x11, 0x22 ];
 /// Combine USB classes to avoid mutex nightmares
 pub struct UsbCtx {
     pub usb_serial: SerialPort<'static, Usbd<UsbPeripheral<'static>>>,
-    pub usb_store: Scsi<'static, Usbd<UsbPeripheral<'static>>, GhostFat>,
+    pub usb_store: Scsi<'static, Usbd<UsbPeripheral<'static>>, GhostFat<'static>>,
 }
 
 
@@ -65,6 +68,9 @@ mod app {
     #[init(local = [
         CLOCKS: Option<Clocks<ExternalOscillator, Internal, LfOscStopped>> = None,
         USB_ALLOCATOR: Option<UsbBusAllocator<Usbd<UsbPeripheral<'static>>>> = None,
+        BIN: [u8; 1024] = [0u8; 1024],
+        FILES: Option<[File<'static>; 2]> = None,
+        FLASH: Option<FlashControl> = None,
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         let periph = cx.device;
@@ -88,7 +94,16 @@ mod app {
         // Attach USB classes
         let usb_serial = SerialPort::new(&usb_bus);
 
-        let block_dev = GhostFat::new(Default::default());
+        // Setup files
+        *cx.local.FLASH = Some(FlashControl::new(periph.NVMC));
+        
+        *cx.local.FILES = Some([
+            File::new_ro("a.txt", b"12345\r\n"),
+            //File::new_rw("b.bin", cx.local.BIN.as_mut()),
+            File::new_dyn("b.bin", cx.local.FLASH.as_mut().unwrap()),
+        ]);
+
+        let block_dev = GhostFat::new(cx.local.FILES.as_mut().unwrap(), Default::default());
         let usb_store = Scsi::new(&usb_bus, 64, block_dev, "V", "P", "0.1");
 
         // Setup USB device

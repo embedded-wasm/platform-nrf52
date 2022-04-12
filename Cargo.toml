@@ -12,7 +12,7 @@ defmt-info = []
 defmt-warn = []
 defmt-error = []
 
-default = [ "defmt-default" ]
+default = [ "defmt-default", "defmt-debug", "ghostfat/defmt", "ghostfat/defmt-debug" ]
 
 
 [dependencies]
@@ -27,7 +27,7 @@ embedded-hal = "1.0.0-alpha.6"
 usb-device = "0.2.8"
 usbd-serial = "0.1.1"
 usbd_scsi = "0.1.0"
-
+ghostfat = { version = "0.3.0", default_features = false, features = [ "nightly", "defmt", "defmt-debug" ] }
 
 wasm-embedded-spec = { version="0.3.0", default_features=false }
 wasm-embedded-rt-wasm3 = { version="*", default-features=false, features=[ "build-wasm3" ] }
@@ -44,6 +44,7 @@ packing = "0.2.0"
 
 libc = { version = "0.2" , features = ["extra_traits"] }
 libm = "0.2.2"
+embedded-storage = "0.3.0"
 
 # https://github.com/rust-embedded/book/issues/255
 [dependencies.compiler_builtins]
@@ -73,3 +74,7 @@ wasm-embedded-rt-wasm3 = { git = "https://github.com/embedded-wasm/rt_wasm3" }
 
 #nrf52833-hal = { git = "https://github.com/nrf-rs/nrf-hal" }
 #wasm3-sys = { path = "../forks/wasm3-rs/wasm3-sys" }
+
+# You'll need to patch to run either a local or git version of ghostfat
+ghostfat = { path = "../ghostfat" }
+#ghostfat = { git = "https://github.com/ryankuttr/ghostfat" }
