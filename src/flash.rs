@@ -9,7 +9,7 @@ const APP_START: usize = 0x00000000;
 const APP_LEN: usize = 512 * 1024;
 
 const WASM_START: usize = 0x00080000;
-const WASM_LEN: usize = 64 * 1024;
+const WASM_LEN: usize = 256 * 1024;
 
 pub struct FlashControl {
     nvm: UnsafeCell<Nvmc<NVMC>>,

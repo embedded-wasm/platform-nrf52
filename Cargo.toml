@@ -22,12 +22,12 @@ cortex-m-rtic = "1.0.0"
 nrf52840-pac = "0.11.0"
 nrf52840-hal = { version = "0.15.0", features = [ "rt" ] }
 
-embedded-hal = "1.0.0-alpha.6"
+embedded-hal = "=1.0.0-alpha.7"
 
 usb-device = "0.2.8"
 usbd-serial = "0.1.1"
 usbd_scsi = "0.1.0"
-ghostfat = { version = "0.3.0", default_features = false, features = [ "nightly", "defmt", "defmt-debug" ] }
+ghostfat = { version = "0.4.0", default_features = false, features = [ "nightly", "defmt", "defmt-debug" ] }
 
 wasm-embedded-spec = { version="0.3.0", default_features=false }
 wasm-embedded-rt-wasm3 = { version="*", default-features=false, features=[ "build-wasm3" ] }
